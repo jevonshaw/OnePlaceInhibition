@@ -1,0 +1,133 @@
+import numpy as np
+import pylab as lab
+import matplotlib as plt
+import matplotlib.cm as colmap
+import random as rand
+from numpy import linalg as LA
+import sys
+
+lowLim = 0
+upperLim = 2
+noOfSteps = 100
+xrange = np.linspace(lowLim, upperLim, noOfSteps)
+yrange = np.linspace(lowLim, upperLim, noOfSteps) #creates (3rd argument) evenly spaced
+# numbers from 1st argument to the second argument. In other words
+# (|2nd-1st|)/3rd.
+xx, yy = np.meshgrid(xrange, yrange, sparse=True)
+numOfGCells = 50
+C = 40
+## connectivity constant
+
+def weightMtx():
+    weightMtx = np.zeros([1, numOfGCells])
+    refVec = np.zeros([1,numOfGCells])
+    for k in range(C):
+        refVec[0][k] = rand.uniform(0,1)
+    weightMtx[0][:] = np.random.permutation(refVec[0][:])
+    return weightMtx
+## generates the weight vector
+
+class GridCell:
+    def __init__(self): ## computes activity of the cell with s spacing
+        self.psi = rand.uniform(0, np.pi/3)
+##      tilt
+        self.phi = np.array([rand.uniform(0.0,1.0), rand.uniform(0.0,1.0)])
+##      offset vector
+        theta = [-np.pi/3, 0, np.pi/3]
+##      various variables and parameters
+        self.s = rand.uniform(0.3, 0.9)
+        constant = (4*np.pi/(self.s*np.sqrt(3)))
+        def v(xx):
+            return np.array([np.cos(xx), np.sin(xx)])
+##      returns an array with the x and y positions of the rat
+        K = np.zeros([noOfSteps, noOfSteps])
+        def G(z):      
+            offvec = np.array([xx, yy]) - self.phi
+            for t in theta:
+                z += np.cos(constant*np.dot(v(t-self.psi), offvec))
+            return (1/3)*z
+##      computes the grid activity for the cell
+        self.g = G(K)
+##      assigns the grid activity of the cell to variable g
+
+def iVec():
+    M = np.zeros([numOfGCells, 10000])
+    for i in range(numOfGCells):
+        a = GridCell();
+        M[i][:] = np.reshape(a.g, (1,10000));
+##    creates a matrix of a bunch of grid cells
+    inputInt = np.dot(weightMtx(), M);
+    inputVector = (2/(3*numOfGCells*(C/100)))*inputInt+(1/3);
+    return inputVector;
+## generates the grid cell input matrix using the for loop above,
+## the weight mtx, and Joel's formula
+
+I=iVec();
+
+def plcCell(inputVector):
+    tau=10;
+    dt=0.1;
+    Tfin=500;
+    t=0.0;
+    c=tau/dt;
+    feff=1.71;
+    fpeak=2;
+    fthresh=0.67;
+    sig = 0;
+    u=np.zeros([1,10000]);
+    uPlus=np.zeros([1,10000]);
+    sigPlus=np.zeros([1,10000]);
+    relErr=1;
+    DTchk=10;
+    Tchk=50;
+    uForNorm=np.zeros([1,10000]);
+    while t<Tfin and relErr>(1e-6):
+        uPlus[0][:]= 0.5*(u[0][:] + np.absolute(u[0][:]))         
+        sig = fpeak*uPlus-fthresh;
+        sigPlus[0][:]=0.5*(sig[0][:]+np.absolute(sig[0][:]))
+        h=feff*sigPlus;
+        u=(1/(c+1))*((c*u)+I-h);
+        t=t+dt;
+## solves the differential equation
+        lab.figure(1)
+        lab.title('Convergence', fontsize=20)
+        lab.xlabel('Time (ms)', fontsize=16)
+        lab.ylabel('Activity', fontsize=16)        
+        lab.subplot(121)
+        lab.plot(t, I[0][90], 'r--')
+        lab.plot(t, u[0][90], 'k--')
+        lab.subplot(122)
+        lab.plot(t, u[0,989], 'ko')
+        if t>=Tchk:
+            Tchk=Tchk+DTchk;
+            relErr=(LA.norm(uForNorm-u))/(LA.norm(uForNorm));
+            uForNorm=u;
+    lab.show()
+    return u;
+
+
+u=plcCell(I);
+##the variable u is a matrics which stores place cell activity, accounting
+##for input I
+u=np.reshape(u,(100,100))
+I=np.reshape(I,(100,100))
+##the reshaping is done so that we can see the plot. Reshaping is NOT completely
+##necessary
+
+
+def displayPlot():
+    lab.ylim(lowLim, upperLim)
+    lab.xlim(lowLim, upperLim)
+    
+    lab.figure(2)
+    lab.subplot(121)
+    lab.title('Grid cell input')
+    lab.contourf(xrange, yrange, I, cmap=colmap.get_cmap('Reds'))
+    lab.colorbar()
+    lab.subplot(122)
+    lab.title('Place Cell Output')
+    lab.contourf(xrange, yrange, u, cmap=colmap.get_cmap('Reds'))
+    lab.colorbar()
+    lab.show()
+   
+displayPlot()
